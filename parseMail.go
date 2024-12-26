@@ -104,23 +104,33 @@ func getAddressData(
 ) (AddressData, error) {
 
 	var err error
+	name := ""
+	addressdata, exists := retval[normaddr];
+	if exists {
+		name = addressdata.Name
+	} else {
+		name = (*addressbook)[normaddr]
+	}
 
-	if addressdata, ok := retval[normaddr]; ok {
-		if addressdata.Name == "" {
-			dec := new(mime.WordDecoder)
-			name := ""
-			if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
-				name = listname
-			} else {
-				name, err = dec.DecodeHeader(address.Name)
-			}
-			if err != nil {
-				return AddressData{}, errors.New("Cannot decode address.Name")
-			}
-			if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
-				addressdata.Names = append(addressdata.Names, name)
-			}
+	if name == "" {
+		dec := new(mime.WordDecoder)
+		if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
+			name = listname
+		} else {
+			name, err = dec.DecodeHeader(address.Name)
 		}
+		if err != nil {
+			return AddressData{}, errors.New("Cannot decode address.Name")
+		}
+		if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
+			addressdata.Names = append(addressdata.Names, name)
+		}
+	} else if !exists {
+			addressdata.Name = name
+			delete(*addressbook, normaddr)
+	}
+
+	if exists {
 		if addressdata.Class < class {
 			addressdata.Class = class
 		}
@@ -128,36 +138,15 @@ func getAddressData(
 			addressdata.ClassDate[class] = time.Unix()
 		}
 		addressdata.ClassCount[class]++
-		return addressdata, nil
 	} else {
-		addressdata := AddressData{}
-		addressbookname := (*addressbook)[normaddr]
-		if addressbookname == "" {
-			dec := new(mime.WordDecoder)
-			name := ""
-			if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
-				name = listname
-			} else {
-				name, err = dec.DecodeHeader(address.Name)
-			}
-			if err != nil {
-				return AddressData{}, errors.New("Cannot decode address.Name")
-			}
-			if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
-				addressdata.Names = append(addressdata.Names, name)
-			}
-		} else {
-			addressdata.Name = addressbookname
-			delete(*addressbook, normaddr)
-		}
 		addressdata.Address = normaddr
 		addressdata.Class = class
 		addressdata.ClassDate = [3]int64{0, 0, 0}
 		addressdata.ClassDate[class] = time.Unix()
 		addressdata.ClassCount = [3]int{0, 0, 0}
 		addressdata.ClassCount[class] = 1
-		return addressdata, nil
 	}
+	return addressdata, nil
 }
 
 func processHeaders(
