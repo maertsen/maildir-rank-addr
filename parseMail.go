@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
@@ -90,6 +92,74 @@ func filterAddress(address string, customFilters []*regexp.Regexp) bool {
 	return false
 }
 
+func getAddressData(
+	retval map[string]AddressData,
+	addressbook *map[string]string,
+	address *mail.Address,
+	normaddr string,
+	class int,
+	time time.Time,
+	listname string,
+	listid string,
+) (AddressData, error) {
+
+	var err error
+
+	if addressdata, ok := retval[normaddr]; ok {
+		if addressdata.Name == "" {
+			dec := new(mime.WordDecoder)
+			name := ""
+			if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
+				name = listname
+			} else {
+				name, err = dec.DecodeHeader(address.Name)
+			}
+			if err != nil {
+				return AddressData{}, errors.New("Cannot decode address.Name")
+			}
+			if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
+				addressdata.Names = append(addressdata.Names, name)
+			}
+		}
+		if addressdata.Class < class {
+			addressdata.Class = class
+		}
+		if addressdata.ClassDate[class] < time.Unix() {
+			addressdata.ClassDate[class] = time.Unix()
+		}
+		addressdata.ClassCount[class]++
+		return addressdata, nil
+	} else {
+		addressdata := AddressData{}
+		addressbookname := (*addressbook)[normaddr]
+		if addressbookname == "" {
+			dec := new(mime.WordDecoder)
+			name := ""
+			if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
+				name = listname
+			} else {
+				name, err = dec.DecodeHeader(address.Name)
+			}
+			if err != nil {
+				return AddressData{}, errors.New("Cannot decode address.Name")
+			}
+			if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
+				addressdata.Names = append(addressdata.Names, name)
+			}
+		} else {
+			addressdata.Name = addressbookname
+			delete(*addressbook, normaddr)
+		}
+		addressdata.Address = normaddr
+		addressdata.Class = class
+		addressdata.ClassDate = [3]int64{0, 0, 0}
+		addressdata.ClassDate[class] = time.Unix()
+		addressdata.ClassCount = [3]int{0, 0, 0}
+		addressdata.ClassCount[class] = 1
+		return addressdata, nil
+	}
+}
+
 func processHeaders(
 	headers <-chan *mail.Header,
 	retvalchan chan map[string]AddressData,
@@ -139,59 +209,20 @@ func processHeaders(
 					sender,
 					addresses,
 				)
-				if addressdata, ok := retval[normaddr]; ok {
-					if addressdata.Name == "" {
-						dec := new(mime.WordDecoder)
-						name := ""
-						if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
-							name = listname
-						} else {
-							name, err = dec.DecodeHeader(address.Name)
-						}
-						if err != nil {
-							continue
-						}
-						if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
-							addressdata.Names = append(addressdata.Names, name)
-						}
-					}
-					if addressdata.Class < class {
-						addressdata.Class = class
-					}
-					if addressdata.ClassDate[class] < time.Unix() {
-						addressdata.ClassDate[class] = time.Unix()
-					}
-					addressdata.ClassCount[class]++
-					retval[normaddr] = addressdata
-				} else {
-					addressdata := AddressData{}
-					addressbookname := addressbook[normaddr]
-					if addressbookname == "" {
-						dec := new(mime.WordDecoder)
-						name := ""
-						if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
-							name = listname
-						} else {
-							name, err = dec.DecodeHeader(address.Name)
-						}
-						if err != nil {
-							continue
-						}
-						if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
-							addressdata.Names = append(addressdata.Names, name)
-						}
-					} else {
-						addressdata.Name = addressbookname
-						delete(addressbook, normaddr)
-					}
-					addressdata.Address = normaddr
-					addressdata.Class = class
-					addressdata.ClassDate = [3]int64{0, 0, 0}
-					addressdata.ClassDate[class] = time.Unix()
-					addressdata.ClassCount = [3]int{0, 0, 0}
-					addressdata.ClassCount[class] = 1
-					retval[normaddr] = addressdata
+				addressdata, err := getAddressData(
+							retval, 
+							&addressbook,
+							address,
+							normaddr,
+							class,
+							time,
+							listname,
+							listid,
+						)
+				if err != nil {
+					continue
 				}
+				retval[normaddr] = addressdata
 			}
 
 		}
