@@ -14,7 +14,7 @@ available extremely fast.
 - collects from To, Cc, Bcc and From fields
 - ranks addresses explicitly emailed by you higher
 - configurable output via go templates
-- uses the most frequent non-empty display name for each email
+- uses the most frequent non-empty display name for each email, except for mailing lists (where list-id takes precedence)
 - display name can be unicode normalized for search purposes
 - filters common "no reply" addresses, additional filters can be added via regexes
 - normalizes emails to lower case

@@ -107,6 +107,11 @@ func processHeaders(
 			continue
 		}
 
+		listidheader := header.Get("list-id")
+		pattern := regexp.MustCompile(`(.+)<(.+)>`)
+		listname := pattern.ReplaceAllString(listidheader, "$1")
+		listid := pattern.ReplaceAllString(listidheader, "$2")
+
 		senderaddress, err := header.AddressList("from")
 		var sender string
 
@@ -137,7 +142,12 @@ func processHeaders(
 				if addressdata, ok := retval[normaddr]; ok {
 					if addressdata.Name == "" {
 						dec := new(mime.WordDecoder)
-						name, err := dec.DecodeHeader(address.Name)
+						name := ""
+						if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
+							name = listname
+						} else {
+							name, err = dec.DecodeHeader(address.Name)
+						}
 						if err != nil {
 							continue
 						}
@@ -158,7 +168,12 @@ func processHeaders(
 					addressbookname := addressbook[normaddr]
 					if addressbookname == "" {
 						dec := new(mime.WordDecoder)
-						name, err := dec.DecodeHeader(address.Name)
+						name := ""
+						if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
+							name = listname
+						} else {
+							name, err = dec.DecodeHeader(address.Name)
+						}
 						if err != nil {
 							continue
 						}
