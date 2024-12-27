@@ -24,7 +24,15 @@ type Config struct {
 	outputpath               string
 	addresses                []*regexp.Regexp
 	template                 *template.Template
+	listtemplate             *template.Template
 	customFilters            []*regexp.Regexp
 	addressbookLookupCommand *exec.Cmd
 	addressbookAddUnmatched  bool
+}
+
+type ListIdData struct {
+	Name      string
+	LocalPart string
+	Domain    string
+	ListId    string
 }

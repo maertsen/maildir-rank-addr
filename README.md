@@ -14,7 +14,8 @@ available extremely fast.
 - collects from To, Cc, Bcc and From fields
 - ranks addresses explicitly emailed by you higher
 - configurable output via go templates
-- uses the most frequent non-empty display name for each email, except for mailing lists (where list-id takes precedence)
+- display name of lists further configurable via templates
+- uses the most frequent non-empty display name for each email
 - display name can be unicode normalized for search purposes
 - filters common "no reply" addresses, additional filters can be added via regexes
 - normalizes emails to lower case
@@ -52,6 +53,7 @@ Supported flags:
       --addresses strings   comma separated list of your email addresses (regex possible)
       --config string       path to config file
       --filters strings     comma separated list of regexes to filter
+      --list-template string      list output template
       --maildir strings     comma separated list of paths to maildir folders
       --outputpath string   path to output file
       --template string     output template
@@ -90,6 +92,22 @@ Available keys:
 ```
 
 Default: `{{.Address}}\t{{.Name}}`
+
+**list-template**
+
+Uses go's `text/template` to configure the Name in the output specifically for mailing lists, based on the List-Id header.
+Available keys:
+
+```
+   Name: the name configured by the list in List-Id
+   LocalPart: the local part of the address
+   Domain: the domain of the address
+   ListId: the listid
+```
+
+Default: `{{.Name}}`
+
+To disable this feature set the template to an empty string. To seemingly remove output use a single space.
 
 **filters**
 

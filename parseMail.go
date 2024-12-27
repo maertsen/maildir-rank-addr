@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"mime"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	_ "github.com/emersion/go-message/charset"
@@ -99,6 +101,7 @@ func getAddressData(
 	normaddr string,
 	class int,
 	time time.Time,
+	listtemplate *template.Template,
 	listname string,
 	listid string,
 ) (AddressData, error) {
@@ -106,28 +109,34 @@ func getAddressData(
 	var err error
 	name := ""
 	addressdata, exists := retval[normaddr];
+	addressbookname := (*addressbook)[normaddr]
+	splitnorm := strings.Split(normaddr, "@")
+	islist := len(listid) > 0 && (strings.Join(splitnorm, ".") == listid)
 	if exists {
 		name = addressdata.Name
-	} else {
+	} else if addressbookname != "" {
 		name = (*addressbook)[normaddr]
+	} else if islist {
+		var tpl bytes.Buffer
+		listiddata := ListIdData{listname, splitnorm[0], splitnorm[1], listid}
+		listtemplate.Execute(&tpl, listiddata)
+		name = tpl.String()
 	}
 
 	if name == "" {
 		dec := new(mime.WordDecoder)
-		if len(listid) > 0 && (strings.Join(strings.Split(normaddr,"@"), ".") == listid) {
-			name = listname
-		} else {
-			name, err = dec.DecodeHeader(address.Name)
-		}
+		name, err = dec.DecodeHeader(address.Name)
 		if err != nil {
 			return AddressData{}, errors.New("Cannot decode address.Name")
 		}
 		if (strings.ToLower(name) != normaddr) && (strings.ToLower(name) != "") {
 			addressdata.Names = append(addressdata.Names, name)
 		}
-	} else if !exists {
-			addressdata.Name = name
-			delete(*addressbook, normaddr)
+	} else if !exists && addressbookname != "" {
+		addressdata.Name = name
+		delete(*addressbook, normaddr)
+	} else if !exists && islist {
+		addressdata.Name = name
 	}
 
 	if exists {
@@ -154,6 +163,7 @@ func processHeaders(
 	retvalchan chan map[string]AddressData,
 	addresses []*regexp.Regexp,
 	customFilters []*regexp.Regexp,
+	listtemplate *template.Template,
 	addressbook map[string]string,
 ) {
 	count := 0
@@ -199,12 +209,13 @@ func processHeaders(
 					addresses,
 				)
 				addressdata, err := getAddressData(
-							retval, 
+							retval,
 							&addressbook,
 							address,
 							normaddr,
 							class,
 							time,
+							listtemplate,
 							listname,
 							listid,
 						)
@@ -222,7 +233,13 @@ func processHeaders(
 	close(retvalchan)
 }
 
-func walkMaildir(path string, addresses []*regexp.Regexp, customFilters []*regexp.Regexp, addressbook map[string]string) map[string]AddressData {
+func walkMaildir(
+	path string,
+	addresses []*regexp.Regexp,
+	customFilters []*regexp.Regexp,
+	listtemplate *template.Template,
+	addressbook map[string]string,
+) map[string]AddressData {
 	headers := make(chan *mail.Header)
 	messagePaths := make(chan string, 4096)
 
@@ -237,7 +254,7 @@ func walkMaildir(path string, addresses []*regexp.Regexp, customFilters []*regex
 	}
 
 	retvalchan := make(chan map[string]AddressData)
-	go processHeaders(headers, retvalchan, addresses, customFilters, addressbook)
+	go processHeaders(headers, retvalchan, addresses, customFilters, listtemplate, addressbook)
 
 	filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -264,10 +281,16 @@ func walkMaildir(path string, addresses []*regexp.Regexp, customFilters []*regex
 	return <-retvalchan
 }
 
-func walkMaildirs(paths []string, addresses []*regexp.Regexp, customFilters []*regexp.Regexp, addressbook map[string]string) map[string]AddressData {
+func walkMaildirs(
+	paths []string,
+	addresses []*regexp.Regexp,
+	customFilters []*regexp.Regexp,
+	listtemplate *template.Template,
+	addressbook map[string]string,
+) map[string]AddressData {
 	data := make(map[string]AddressData)
 	for _, maildir := range paths {
-		dataNew := walkMaildir(maildir, addresses, customFilters, addressbook)
+		dataNew := walkMaildir(maildir, addresses, customFilters, listtemplate, addressbook)
 		if len(data) == 0 {
 			data = dataNew
 			continue
